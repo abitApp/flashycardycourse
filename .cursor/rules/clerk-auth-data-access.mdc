@@ -1,0 +1,40 @@
+---
+description: Clerk handles all auth; users may only access their own data
+alwaysApply: true
+---
+
+# Auth and data ownership
+
+All authentication is handled by Clerk (`@clerk/nextjs`). Don't build custom auth, sessions, password handling or user tables. A user must never be able to read, change or delete data that isn't theirs.
+
+## Rules
+
+- Routes are public by default (`src/proxy.ts` doesn't protect anything). Every page, Route Handler and Server Action that touches user data must call `await auth.protect()` itself. In Next.js 15+ `auth()` is async, always `await` it.
+- Take the user from the server session only: `const { userId } = await auth.protect()`. Never trust a `userId` (or deck owner) sent from the client in props, form fields, URL params or request bodies.
+- Every query and mutation on user data filters by that `userId`. This includes reads, updates and deletes, not just lists.
+- Look up a single record by id **and** owner. If it isn't found, return a 404 / "not found". Don't reveal that it exists for someone else.
+- `cards` have no `userId`. Reach them through their deck and verify the deck belongs to the user first (join `decks` or check ownership in the same query).
+- Server Actions are public endpoints. Re-check auth and ownership inside each one, even if the page already did.
+- Never expose `CLERK_SECRET_KEY` or call Clerk's backend API from client code. Use `@clerk/nextjs`, not `@clerk/clerk-react`.
+
+```ts
+// ❌ BAD: trusts the client, no owner check
+export async function deleteDeck(formData: FormData) {
+  await db.delete(decks).where(eq(decks.id, String(formData.get("id"))));
+}
+
+// ✅ GOOD: session user + owner check in the same query
+export async function deleteDeck(formData: FormData) {
+  const { userId } = await auth.protect();
+  await db
+    .delete(decks)
+    .where(and(eq(decks.id, String(formData.get("id"))), eq(decks.userId, userId)));
+}
+
+// ✅ GOOD: cards through the deck's owner
+const rows = await db
+  .select({ card: cards })
+  .from(cards)
+  .innerJoin(decks, eq(cards.deckId, decks.id))
+  .where(and(eq(cards.deckId, deckId), eq(decks.userId, userId)));
+```

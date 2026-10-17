@@ -1,0 +1,35 @@
+---
+description: All database access must go through the Drizzle schema and query builder
+alwaysApply: true
+---
+
+# Database access with Drizzle
+
+Every database interaction uses Drizzle ORM with the schema in `src/db/schema.ts` and the client exported from `src/db/index.ts` (`import { db } from "@/db"`).
+
+## Rules
+
+- Define every table, column, index and relation in `src/db/schema.ts`. Never create or alter tables by hand or with raw SQL.
+- Query only through `db` with Drizzle's query builder and operators (`eq`, `and`, `desc`, ...) imported from `drizzle-orm`, using the table objects from the schema.
+- Don't use raw SQL (`sql` template, `db.execute`) or another client (`pg`, `@neondatabase/serverless` directly, Prisma) in app code. `sql` is OK only for small expressions inside a Drizzle query (e.g. `count(*)`) when no operator exists.
+- Derive types from the schema (`typeof decks.$inferSelect`, or the exported `Deck`, `NewDeck`, `Card`, `NewCard`). Don't hand-write types for table rows.
+- Schema changes: edit `src/db/schema.ts`, then run `npm run db:generate` and `npm run db:migrate`. Never edit files in `drizzle/` by hand.
+- Read `DATABASE_URL` only in `src/db/index.ts`. Migrations use `DATABASE_URL_UNPOOLED` via `drizzle.config.ts`.
+- Only import `@/db` in Server Components (reads) and Server Actions (writes), see `server-data-flow.mdc`. Never import it in a Client Component or Route Handler.
+
+## User data
+
+Every query and mutation must be scoped to the signed-in Clerk user. See `clerk-auth-data-access.mdc` for the ownership rules.
+
+```ts
+// ❌ BAD
+const all = await db.select().from(decks);
+
+// ✅ GOOD
+const { userId } = await auth.protect();
+const rows = await db.select().from(decks).where(eq(decks.userId, userId));
+```
+
+## Next.js 16 (Cache Components)
+
+Components that query the database are dynamic. Wrap them in `<Suspense>` or the route fails with a blocking-prerender error.

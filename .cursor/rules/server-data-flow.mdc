@@ -1,0 +1,38 @@
+---
+description: Reads go through Server Components, writes go through Server Actions
+alwaysApply: true
+---
+
+# Data flow: Server Components read, Server Actions write
+
+## Rules
+
+- **Retrieval:** fetch data only in Server Components (async components that call `db` directly). Pass the result to Client Components as props.
+- **Mutations:** every insert, update and delete goes through a Server Action (`"use server"`). Never mutate from a Server Component, Route Handler or Client Component.
+- Don't fetch data in Client Components (`useEffect`, `fetch`, SWR, React Query) and don't add API routes (`app/api/*`) to read or write our database.
+- Put actions in a colocated `actions.ts` that starts with `"use server"` (e.g. `src/app/decks/actions.ts`). Client Components import and call them, or use them as `<form action={...}>`.
+- Inside each action: `await auth.protect()`, validate the input, scope the query to the user (see `clerk-auth-data-access.mdc`), run the Drizzle mutation, then call `revalidatePath` (or `updateTag`) so the page re-renders with fresh data.
+- Wrap async Server Components that read the database in `<Suspense>` (Cache Components is on).
+- Actions return plain serializable values (or nothing). Never return DB rows with data the user shouldn't see.
+
+```tsx
+// ❌ BAD: Client Component reading and writing through an API route
+"use client";
+useEffect(() => { fetch("/api/decks").then(...) }, []);
+await fetch("/api/decks", { method: "POST", body });
+
+// ✅ GOOD: Server Component reads
+async function DeckList() {
+  const { userId } = await auth.protect();
+  const rows = await db.select().from(decks).where(eq(decks.userId, userId));
+  return <DeckGrid decks={rows} />;
+}
+
+// ✅ GOOD: Server Action writes (actions.ts)
+"use server";
+export async function createDeck(formData: FormData) {
+  const { userId } = await auth.protect();
+  await db.insert(decks).values({ userId, title: String(formData.get("title")) });
+  revalidatePath("/decks");
+}
+```

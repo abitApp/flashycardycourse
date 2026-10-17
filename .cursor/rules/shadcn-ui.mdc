@@ -1,0 +1,39 @@
+---
+description: The whole project uses shadcn/ui for UI components; install missing ones with the shadcn CLI
+alwaysApply: true
+---
+
+# shadcn/ui
+
+All UI in this project is built with shadcn/ui. Components live in `src/components/ui/` and are imported via `@/components/ui/<name>`.
+
+## Missing components
+
+Before using a component, check whether `src/components/ui/<name>.tsx` exists. If it doesn't, install it with the shadcn CLI instead of writing it by hand:
+
+```bash
+npx shadcn@latest add button
+```
+
+- Use the kebab-case name from the shadcn docs: `npx shadcn@latest add dropdown-menu`.
+- Several at once: `npx shadcn@latest add card dialog tabs`.
+- Don't pass `--overwrite` unless asked; it discards local edits to that component.
+
+## Usage
+
+- Prefer existing shadcn components over custom markup or other UI libraries.
+- These components are built on Base UI, not Radix. Use the `render` prop instead of `asChild`:
+
+```tsx
+// ❌ BAD
+<DialogTrigger asChild><Button>Open</Button></DialogTrigger>
+
+// ✅ GOOD
+<DialogTrigger render={<Button />}>Open</DialogTrigger>
+```
+
+- Style with Tailwind classes via `className`, and use theme tokens (`bg-primary`, `text-muted-foreground`) defined in `src/app/globals.css` rather than raw colors.
+
+## Data Table
+
+Data Table is not a CLI component. Use the shared `DataTable` in `src/components/data-table.tsx`, built on `@tanstack/react-table` v8 (v9 has an incompatible API).
